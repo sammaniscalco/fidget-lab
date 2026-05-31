@@ -35,6 +35,8 @@ const state = {
 
 let audioContext;
 let spinnerDegrees = 0;
+let spinnerVelocity = 0;
+let spinnerFrame = 0;
 
 let root;
 
@@ -222,7 +224,8 @@ function renderStressBall() {
       '--press-x': '0px',
       '--press-y': '0px',
       '--shine-x': '50%',
-      '--shine-y': '32%'
+      '--shine-y': '32%',
+      '--twist': '0deg'
     },
     role: 'button',
     tabindex: '0',
@@ -234,24 +237,89 @@ function renderStressBall() {
   ]);
 
   let down = false;
+  let frame = 0;
+  let lastMove = { x: 0, y: 0 };
+  const physics = {
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    targetX: 0,
+    targetY: 0,
+    squash: 1,
+    stretch: 1,
+    targetSquash: 1,
+    targetStretch: 1
+  };
   const label = toy.querySelector('.stress-label');
+
+  const applyStressFrame = () => {
+    const spring = down ? 0.34 : 0.17;
+    const damping = down ? 0.58 : 0.72;
+    physics.vx = (physics.vx + (physics.targetX - physics.x) * spring) * damping;
+    physics.vy = (physics.vy + (physics.targetY - physics.y) * spring) * damping;
+    physics.x += physics.vx;
+    physics.y += physics.vy;
+    physics.stretch += (physics.targetStretch - physics.stretch) * 0.28;
+    physics.squash += (physics.targetSquash - physics.squash) * 0.28;
+
+    const pressure = Math.hypot(physics.x, physics.y);
+    toy.style.setProperty('--press-x', `${physics.x}px`);
+    toy.style.setProperty('--press-y', `${physics.y}px`);
+    toy.style.setProperty('--shine-x', `${50 + physics.x / 2}%`);
+    toy.style.setProperty('--shine-y', `${32 + physics.y / 2}%`);
+    toy.style.setProperty('--squish-x', physics.stretch.toFixed(3));
+    toy.style.setProperty('--squish-y', physics.squash.toFixed(3));
+    toy.style.setProperty('--twist', `${clamp(physics.vx * 0.9, -10, 10)}deg`);
+    label.textContent = `${Math.round(pressure)} psi`;
+
+    if (
+      down ||
+      Math.abs(physics.vx) > 0.05 ||
+      Math.abs(physics.vy) > 0.05 ||
+      Math.abs(physics.x) > 0.05 ||
+      Math.abs(physics.y) > 0.05 ||
+      Math.abs(physics.stretch - 1) > 0.002 ||
+      Math.abs(physics.squash - 1) > 0.002
+    ) {
+      frame = requestAnimationFrame(applyStressFrame);
+    } else {
+      frame = 0;
+      toy.style.setProperty('--press-x', '0px');
+      toy.style.setProperty('--press-y', '0px');
+      toy.style.setProperty('--shine-x', '50%');
+      toy.style.setProperty('--shine-y', '32%');
+      toy.style.setProperty('--squish-x', 1);
+      toy.style.setProperty('--squish-y', 1);
+      toy.style.setProperty('--twist', '0deg');
+      label.textContent = '0 psi';
+    }
+  };
+
+  const ensureStressFrame = () => {
+    if (!frame) frame = requestAnimationFrame(applyStressFrame);
+  };
+
   const move = (event) => {
     const rect = toy.getBoundingClientRect();
     const x = ((event.clientX - rect.left) / rect.width - 0.5) * 44;
     const y = ((event.clientY - rect.top) / rect.height - 0.5) * 44;
-    toy.style.setProperty('--press-x', `${x}px`);
-    toy.style.setProperty('--press-y', `${y}px`);
-    toy.style.setProperty('--shine-x', `${50 + x / 2}%`);
-    toy.style.setProperty('--shine-y', `${32 + y / 2}%`);
-    label.textContent = `${Math.round(Math.hypot(x, y))} psi`;
+    const dx = x - lastMove.x;
+    const dy = y - lastMove.y;
+    const pressure = clamp(Math.hypot(x, y) / 31, 0, 1);
+    const dragForce = clamp(Math.hypot(dx, dy) / 14, 0, 1);
+    physics.targetX = x;
+    physics.targetY = y;
+    physics.targetStretch = clamp(1 + pressure * state.softness / 230 + dragForce * 0.08, 1.03, 1.32);
+    physics.targetSquash = clamp(1 - pressure * state.softness / 330 - dragForce * 0.05, 0.72, 0.96);
+    lastMove = { x, y };
+    ensureStressFrame();
   };
 
   toy.addEventListener('pointerdown', (event) => {
     down = true;
     toy.setPointerCapture(event.pointerId);
     toy.classList.add('is-pressed');
-    toy.style.setProperty('--squish-x', clamp(1 + state.softness / 420, 1.06, 1.22));
-    toy.style.setProperty('--squish-y', clamp(1 - state.softness / 520, 0.82, 0.95));
     move(event);
     playTone('squish');
   });
@@ -261,8 +329,16 @@ function renderStressBall() {
   ['pointerup', 'pointercancel'].forEach((name) => toy.addEventListener(name, () => {
     down = false;
     toy.classList.remove('is-pressed');
-    toy.style.setProperty('--squish-x', 1);
-    toy.style.setProperty('--squish-y', 1);
+    physics.targetX = 0;
+    physics.targetY = 0;
+    physics.targetStretch = clamp(0.95 - Math.abs(physics.vx) / 130, 0.86, 0.99);
+    physics.targetSquash = clamp(1.06 + Math.abs(physics.vy) / 100, 1.02, 1.2);
+    setTimeout(() => {
+      physics.targetStretch = 1;
+      physics.targetSquash = 1;
+      ensureStressFrame();
+    }, 120);
+    ensureStressFrame();
   }));
   return toy;
 }
@@ -270,10 +346,9 @@ function renderStressBall() {
 function renderSpinner() {
   const base = 170 + state.size * 2.25;
   const blades = state.shape === 'bar' ? 2 : state.shape === 'quad' ? 4 : 3;
-  const speed = clamp(1.4 - state.softness / 130, 0.55, 1.25);
   const spinner = el('div', {
     className: `spinner spinner-${state.shape}`,
-    style: { '--duration': `${speed}s`, transform: `rotate(${spinnerDegrees}deg)` }
+    style: { transform: `rotate(${spinnerDegrees}deg)` }
   }, [
     Array.from({ length: blades }, (_, index) => el('span', {
       className: 'spinner-blade',
@@ -290,27 +365,60 @@ function renderSpinner() {
   }, [spinner]);
 
   let drag = null;
-  const flick = (boost = 1) => {
-    spinnerDegrees += 360 * boost + state.softness * 3;
+  let lastTick = 0;
+
+  const spinStep = (time) => {
+    const delta = lastTick ? Math.min((time - lastTick) / 1000, 0.04) : 0.016;
+    lastTick = time;
+    spinnerDegrees += spinnerVelocity * delta;
+    spinnerVelocity *= Math.pow(0.975 - state.softness / 7000, delta * 60);
     spinner.style.transform = `rotate(${spinnerDegrees}deg)`;
+
+    if (Math.abs(spinnerVelocity) > 5) {
+      spinnerFrame = requestAnimationFrame(spinStep);
+    } else {
+      spinnerVelocity = 0;
+      spinnerFrame = 0;
+      lastTick = 0;
+    }
+  };
+
+  const addMomentum = (velocity) => {
+    spinnerVelocity = clamp(spinnerVelocity + velocity, -2600, 2600);
+    if (!spinnerFrame) spinnerFrame = requestAnimationFrame(spinStep);
     playTone('spin');
   };
+
+  const angleFromEvent = (event) => {
+    const rect = wrap.getBoundingClientRect();
+    return Math.atan2(event.clientY - (rect.top + rect.height / 2), event.clientX - (rect.left + rect.width / 2));
+  };
+
   wrap.addEventListener('pointerdown', (event) => {
     wrap.setPointerCapture(event.pointerId);
-    drag = { x: event.clientX, y: event.clientY };
+    drag = { angle: angleFromEvent(event), time: performance.now() };
   });
   wrap.addEventListener('pointermove', (event) => {
     if (!drag) return;
-    const distance = Math.hypot(event.clientX - drag.x, event.clientY - drag.y);
-    if (distance > 28) {
-      flick(clamp(distance / 80, 0.8, 2.5));
-      drag = { x: event.clientX, y: event.clientY };
-    }
+    const angle = angleFromEvent(event);
+    const now = performance.now();
+    let delta = angle - drag.angle;
+    if (delta > Math.PI) delta -= Math.PI * 2;
+    if (delta < -Math.PI) delta += Math.PI * 2;
+    const elapsed = Math.max((now - drag.time) / 1000, 0.016);
+    spinnerDegrees += delta * 180 / Math.PI;
+    spinner.style.transform = `rotate(${spinnerDegrees}deg)`;
+    spinnerVelocity = clamp((delta * 180 / Math.PI) / elapsed * 1.25, -2200, 2200);
+    drag = { angle, time: now };
   });
   wrap.addEventListener('pointerup', () => {
+    if (drag) addMomentum(spinnerVelocity || 720);
     drag = null;
   });
-  wrap.addEventListener('click', () => flick(1));
+  wrap.addEventListener('pointercancel', () => {
+    drag = null;
+  });
+  wrap.addEventListener('click', () => addMomentum(900 + state.softness * 9));
   return wrap;
 }
 

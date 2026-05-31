@@ -320,13 +320,13 @@ h1 {
   position: relative;
   display: grid;
   place-items: center;
-  transform: translate(var(--press-x), var(--press-y)) scale(var(--squish-x), var(--squish-y));
+  transform: translate(var(--press-x), var(--press-y)) rotate(var(--twist)) scale(var(--squish-x), var(--squish-y));
   color: rgba(255, 255, 255, 0.85);
   background:
     radial-gradient(circle at var(--shine-x) var(--shine-y), rgba(255, 255, 255, 0.9), transparent 15%),
     radial-gradient(circle at 58% 62%, color-mix(in srgb, var(--primary), #fff 28%), var(--primary) 48%, color-mix(in srgb, var(--primary), #061820 22%) 100%);
   box-shadow: inset -22px -28px 48px rgba(0, 0, 0, 0.24), inset 14px 16px 34px rgba(255, 255, 255, 0.22), 0 28px 55px rgba(23, 32, 42, 0.24);
-  transition: transform 150ms cubic-bezier(.2,.8,.2,1), border-radius 150ms ease;
+  transition: border-radius 150ms ease;
 }
 
 .stress-round {
@@ -393,7 +393,7 @@ h1 {
   width: 82%;
   height: 82%;
   transform-origin: 50% 50%;
-  transition: transform var(--duration) cubic-bezier(.11,.87,.22,1);
+  will-change: transform;
 }
 
 .spinner-blade {
