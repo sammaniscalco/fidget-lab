@@ -30,6 +30,11 @@ const state = {
   softness: 58,
   shape: 'round',
   muted: false,
+  soundWave: 'toy',
+  tonePitch: 100,
+  toneLength: 100,
+  toneVolume: 75,
+  noiseAmount: 8,
   popResetKey: 0
 };
 
@@ -54,6 +59,7 @@ function el(tag, attrs = {}, children = []) {
   Object.entries(attrs).forEach(([key, value]) => {
     if (key === 'className') node.className = value;
     else if (key === 'style') Object.assign(node.style, value);
+    else if (key === 'value') node.value = value;
     else if (key.startsWith('on')) node.addEventListener(key.slice(2).toLowerCase(), value);
     else if (value !== false && value != null) node.setAttribute(key, value);
   });
@@ -93,18 +99,45 @@ function playTone(kind) {
   }[kind];
 
   filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(kind === 'spin' ? 650 : 900, now);
-  osc.type = config.type;
-  osc.frequency.setValueAtTime(config.start, now);
-  osc.frequency.exponentialRampToValueAtTime(config.end, now + config.length);
+  const length = config.length * state.toneLength / 100;
+  const level = config.gain * state.toneVolume / 100;
+  const pitch = state.tonePitch / 100;
+  const wave = state.soundWave === 'toy' ? config.type : state.soundWave;
+  filter.frequency.setValueAtTime((kind === 'spin' ? 650 : 900) * clamp(pitch, 0.65, 1.8), now);
+  osc.type = wave;
+  osc.frequency.setValueAtTime(config.start * pitch, now);
+  osc.frequency.exponentialRampToValueAtTime(config.end * pitch, now + length);
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(config.gain, now + 0.012);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + config.length);
+  gain.gain.exponentialRampToValueAtTime(level, now + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + length);
   osc.connect(filter);
   filter.connect(gain);
   gain.connect(audio.destination);
   osc.start(now);
-  osc.stop(now + config.length + 0.03);
+  osc.stop(now + length + 0.03);
+
+  if (state.noiseAmount > 0) {
+    const noiseLength = Math.max(0.04, length * 0.72);
+    const buffer = audio.createBuffer(1, Math.ceil(audio.sampleRate * noiseLength), audio.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let index = 0; index < data.length; index += 1) {
+      data[index] = (Math.random() * 2 - 1) * (1 - index / data.length);
+    }
+    const noise = audio.createBufferSource();
+    const noiseGain = audio.createGain();
+    const noiseFilter = audio.createBiquadFilter();
+    noise.buffer = buffer;
+    noiseFilter.type = kind === 'pop' ? 'bandpass' : 'lowpass';
+    noiseFilter.frequency.setValueAtTime(kind === 'pop' ? 1300 * pitch : 520 * pitch, now);
+    noiseGain.gain.setValueAtTime(0.0001, now);
+    noiseGain.gain.exponentialRampToValueAtTime(state.noiseAmount / 450, now + 0.008);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + noiseLength);
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(audio.destination);
+    noise.start(now);
+    noise.stop(now + noiseLength + 0.02);
+  }
 }
 
 function render() {
@@ -144,7 +177,11 @@ function renderPanel() {
         'aria-label': palette.name,
         style: { '--a': palette.primary, '--b': palette.secondary, '--c': palette.accent },
         onclick: () => update({ paletteIndex: index, primary: palette.primary, secondary: palette.secondary, accent: palette.accent })
-      }))),
+      }, [
+        el('span', { className: 'swatch-chip', style: { backgroundColor: palette.primary } }),
+        el('span', { className: 'swatch-chip', style: { backgroundColor: palette.secondary } }),
+        el('span', { className: 'swatch-chip', style: { backgroundColor: palette.accent } })
+      ]))),
       el('div', { className: 'color-inputs' }, [
         colorControl('Main', 'primary'),
         colorControl('Edge', 'secondary'),
@@ -160,6 +197,7 @@ function renderPanel() {
       rangeControl('Size', 'size', 42, 88),
       rangeControl('Bounce', 'softness', 20, 90)
     ]),
+    renderSoundControls(),
     el('div', { className: 'toolbar' }, [
       el('button', {
         className: 'icon-button',
@@ -174,6 +212,31 @@ function renderPanel() {
           update({ popResetKey: state.popResetKey + 1 });
         }
       }, [svgIcon('reset'), 'Reset toy'])
+    ])
+  ]);
+}
+
+function renderSoundControls() {
+  return el('div', { className: 'control-group sound-controls' }, [
+    el('div', { className: 'group-title' }, [svgIcon('sound'), ' Sound']),
+    el('label', { className: 'select-label' }, [
+      'Tone',
+      el('select', { value: state.soundWave, onchange: (event) => update({ soundWave: event.target.value }) }, [
+        el('option', { value: 'toy' }, ['Toy defaults']),
+        el('option', { value: 'sine' }, ['Soft sine']),
+        el('option', { value: 'triangle' }, ['Plucky triangle']),
+        el('option', { value: 'square' }, ['Chippy square']),
+        el('option', { value: 'sawtooth' }, ['Buzzy saw'])
+      ])
+    ]),
+    rangeControl('Pitch', 'tonePitch', 55, 170),
+    rangeControl('Length', 'toneLength', 45, 180),
+    rangeControl('Volume', 'toneVolume', 0, 100),
+    rangeControl('Noise', 'noiseAmount', 0, 80),
+    el('div', { className: 'test-tones' }, [
+      el('button', { className: 'tone-button', onclick: () => playTone('pop') }, ['Pop']),
+      el('button', { className: 'tone-button', onclick: () => playTone('squish') }, ['Squish']),
+      el('button', { className: 'tone-button', onclick: () => playTone('spin') }, ['Spin'])
     ])
   ]);
 }

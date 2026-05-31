@@ -17,7 +17,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -171,15 +172,26 @@ h1 {
 }
 
 .swatch {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  align-items: stretch;
   height: 42px;
+  padding: 4px;
   border: 2px solid transparent;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--a) 0 34%, var(--b) 34% 67%, var(--c) 67%);
+  background: #fff;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8), 0 8px 18px rgba(23, 32, 42, 0.08);
 }
 
 .swatch.is-active {
   border-color: #17202a;
+}
+
+.swatch-chip {
+  min-width: 0;
+  border-radius: 5px;
+  box-shadow: inset 0 -8px 12px rgba(0, 0, 0, 0.12), inset 0 1px 3px rgba(255, 255, 255, 0.45);
 }
 
 .color-inputs {
@@ -189,7 +201,8 @@ h1 {
 }
 
 .color-inputs label,
-.range-label {
+.range-label,
+.select-label {
   display: grid;
   gap: 7px;
   color: #52636a;
@@ -230,6 +243,52 @@ h1 {
 .range-label output {
   color: #17202a;
   text-align: right;
+}
+
+.sound-controls {
+  padding-top: 2px;
+}
+
+.select-label {
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+}
+
+.select-label select {
+  min-width: 0;
+  height: 40px;
+  padding: 0 34px 0 10px;
+  border: 1px solid rgba(23, 32, 42, 0.14);
+  border-radius: 8px;
+  color: #203039;
+  background:
+    linear-gradient(45deg, transparent 50%, #52636a 50%) calc(100% - 17px) 52% / 6px 6px no-repeat,
+    linear-gradient(135deg, #52636a 50%, transparent 50%) calc(100% - 12px) 52% / 6px 6px no-repeat,
+    #fff;
+  appearance: none;
+}
+
+.test-tones {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tone-button {
+  min-height: 38px;
+  border: 1px solid rgba(23, 32, 42, 0.14);
+  border-radius: 8px;
+  color: #203039;
+  background: color-mix(in srgb, var(--secondary), #fff 72%);
+  font-size: 0.84rem;
+  font-weight: 850;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.tone-button:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--primary), #17202a 18%);
+  box-shadow: 0 10px 22px rgba(23, 32, 42, 0.1);
 }
 
 .toolbar {
@@ -544,6 +603,10 @@ h1 {
 
   .range-label {
     grid-template-columns: 1fr 42px;
+  }
+
+  .select-label {
+    grid-template-columns: 1fr;
   }
 
   .range-label input {
